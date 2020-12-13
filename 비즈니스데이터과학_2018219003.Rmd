@@ -1,0 +1,167 @@
+---
+title: "비즈니스 데이터과학 기말과제"
+author: "2018219003 공수현"
+date: '2020 12 11 '
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+**1. 서울, 경기, 강원 지역의 국립공원 위치를 지도 상에 마커로 표시하되 국립공원의 이름을 함께 표시하시오.**
+```{r}
+library(ggmap)
+#구글키 등록
+register_google(key = 'AIzaSyC9pF2Yz5NC4sep23c9oRsi0JnNZka4ZnI')
+
+names <- c("북한산 국립공원(서울)", "북한산 국립공원(경기)", "설악산 국립공원(강원)",
+           "오대산 국립공원(강원)", "치악산 국립공원(강원)", "태백산 국립공원(강원)")
+addr <- c("서울 성북구 보국문로 215",
+          "경기 고양시 덕양구 북한산로 618번길 195",
+          "강원 인제군 북면 한계리",
+          "강원 홍천국 내면 오대산로 2",
+          "강원 원주시 소초면 무쇠점2길 26",
+          "강원 태백시 태백산로 4778(소도동)")
+#주소를 경도와 위도로 변환
+gc <- geocode(enc2utf8(addr)) 
+gc
+#국립공원 명칭과 좌표값으로 데이터프레임 형성
+df <- data.frame(name=names, lon=gc$lon, lat=gc$lat)
+df
+cen <- c(mean(df$lon),mean(df$lat))     #지도의 중심점
+map <- get_googlemap(center=cen,        #지도 가져오기
+                     maptype="roadmap", #지도의 형태
+                     zoom = 7,          #지도의 확대 크기
+                     size=c(320,320),   #지도의 크기
+                     marker=gc)         #마커의 위치
+ggmap(map)
+#명소 이름 지도 위에 표시하기
+gmap <- ggmap(map)
+gmap+geom_text(data=df,                 #지도 위에 텍스트 표시
+               aes(x=lon,y=lat),        #텍스트 위치(국립공원 좌표)
+               size=5,                  #텍스트 크기
+               label=df$name)           #텍스트 내용
+
+```
+
+**2. treemap 패키지의 GNI2014 데이터셋을 이용하여 북아메리카(North America) 대륙에 있는 각 나라의 위치에 그 나라의 인구수를 원의 크기로 표시하시오.(원의 색은 초록색, alpha=0.5)**
+```{r}
+library(treemap)
+library(ggmap)
+library(ggplot2)
+library(writexl)
+
+register_google(key = 'AIzaSyC9pF2Yz5NC4sep23c9oRsi0JnNZka4ZnI') #구글키 등록
+
+data(GNI2014) 
+
+north <- subset(GNI2014, continent == "North America", select = c("population", "continent", "country")) #데이터 추출
+str(north)
+
+write_xlsx(north, path = "north.xlsx")
+
+#교수님 아무리 해도 위도와 경도 없이 문제처럼 출력되지 않아 엑셀로 추출 후 위도와 경도를 추가해 진행하였습니다
+
+north1 <- read.csv("north1.csv")
+str(north1)
+
+sp <- sample(nrow(north1)) 
+df <- north1[sp,]
+head(df)
+
+cen <- c(mean(north1$lon),mean(north1$lat)) #지도의 중심점 계산
+gc <- data.frame(lon=north1$lon, lat=north1$lat) #측정위치 좌표값 데이터
+head(gc)
+
+#마커 없는 지도 가져오기
+map <- get_googlemap(center = cen,
+                     maptype = "roadmap",
+                     zoom = 3)
+ggmap(map)
+
+#지도 저장
+gmap <- ggmap(map)
+#인구수를 원의 크기로 표시
+gmap + geom_point(data = north1,
+                  aes(x=lon, y=lat,size= population),
+                  alpha=0.5,
+                  col="green") + scale_size_continuous(range = c(1,25)) #원의 크기 조절
+```
+
+2번을 잘못 이해하여 treemap과 버블차트도 했습니다. 지우기 아쉬워 함께 올립니다
+```{r}
+library(treemap)
+library(ggplot2)
+
+data("GNI2014")
+str(GNI2014)
+
+treemap(GNI2014, index = c('continent', 'iso3'), #계층구조 설정(대륙-국가)
+        vSize = 'population', #타일의 크기
+        vColor = 'GNI', #타일의 컬러(값이 클수록 진하다)
+        type = 'value', #타일 컬러링 방법
+        bg.labels = 'yellow') #레이블의 배경색
+
+st <- data.frame(state.x77) #매트릭스를 데이터프레임으로 변환
+st <- data.frame(st, stname = rownames(st)) #주 이름의 열 stname을 추가
+treemap(st, index = c("stname"), #타일에 주 이름 표기
+        vSize = "Area", #타일의 크기
+        vColor = 'Population', #타일의 컬러
+        type = 'value', #타일 컬러링 방법
+        title = '북아메리카 지역별 인구수') #트리맵의 제목
+
+st<-data.frame(state.x77) #매트릭스를 데이터프레임으로 변환
+ggplot(data=st, aes(x=Population,y=Area)) +
+  geom_point(aes(size=Population), shape=21, colour="green", fill="green", alpha=0.5) +
+  geom_text(aes(y=as.numeric(Area)), label=rownames(st), size = 1.5, colour="black")
+```
+
+**3. 스티브 잡스의 스탠포드 대학 졸업식 연설문에 대해 워드클라우드를 작성하시오.**
+```{r}
+Sys.setenv(JAVA_HOME='C:/Program Files/Java/jre1.8.0_271')
+
+#워드클라우드
+library(wordcloud)
+#한국어 처리
+library(KoNLP)
+#색상 선택
+library(RColorBrewer)
+
+text <- readLines("steve_Jobs.txt", encoding = "UTF-8") #파일 읽기
+buildDictionary(ext_dic = "woorimalsam") #'우리말씀'한글사전 로딩
+pal <- brewer.pal(8,"Pastel2") #팔레트 생성
+noun <- sapply(text, extractNoun, USE.NAMES = F) #명사 추출
+
+noun2 <- unlist(noun) #추출된 명사 통합
+noun2 <- noun2[nchar(noun2)>1] #1글자 단어 제거
+wordcount <- table(noun2) #단어 빈도수 계산
+temp <- sort(wordcount, decreasing = T)[1:10] 
+temp <- temp[-1] #공백 단어 제거
+temp
+
+barplot(temp, #막대 그래프 작성
+        names.arg = names(temp), #막대 이름을 단어로 표시
+        col = "gray", #막대의 색상 지정
+        main = "빈도수 높은 단어", ylab = "단어 빈도수")
+
+wordcloud(names(wordcount), #단어들
+          freq=wordcount, #단어들의 빈도
+          scale=c(5,0.7), #단어의 폰트크기
+          min.freq = 3, #단어의 최소 빈도
+          random.order = F, #단어의 출력 위치
+          rot.per = .1, #90도 회전 단어 비율
+          colors = pal) #단어의 색
+```
+
+**4. 네이버 데이터랩에서 주제어를 '캠핑'과 '텐트'로 하여 최근 1년 간의 검색 트랜드를 확인하되, 25세 이상과 30대 소비자를 대상으로 남성과 여성을 구분하고, 어떤 차이가 발견되는지 설명하시오.**
+```{r}
+#여성
+knitr::include_graphics("data_wm.jpg") 
+#남성
+knitr::include_graphics("data_m.jpg")
+#남성이 여성보다 평소에도 캠핑과 텐트에 대한 관심이 많은 것을 알 수 있다.
+#여성은 캠핑과 텐트에 대한 검색비중이 비슷하지만, 남성은 캠핑보다 텐트에 대한 검색비중이 더 높다.
+#날이 풀리는 3월 중순부터 날이 추워지는 10월 중순까지 검색 횟수가 증가한다.
+#대략 7월 말부터 8월 말~9월 초까지 검색수가 급격히 감소하는데, 장마때문이라고 예측할 수 있다.
+```
+
+
+**완성된 파일을 본인의 깃허브에 커밋하여 업로드하시오.**
